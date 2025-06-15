@@ -3,55 +3,81 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+
+#define PORT "3490"
+
+void handle_error(char *message[]){
+    perror("%s\n", message);
+    exit(EXIT_FAILURE);
+}
 
 int main(int argc, char *argv[]){
     if(argc != 2){
         fprintf(stderr, "Usage: %s port\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-
-
     
-    printf("Starting server\n");
-
-
-
     struct addrinfo hints;
-    struct addrinfo *result, *rp;
+    struct addrinfo *servinfo, *rp;
+    int s, socket_file_descriptor;
+    int optval = 1;
 
-    memset(&hints, 0,  sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-    hints.ai_protocol = 0;
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC; // IPv6 or IPv4 
+    hints.ai_socktype = SOCK_STREAM; 
+    hints.ai_flags = AI_PASSIVE;    
 
-    int socket = getaddrinfo(NULL, argv[0], &hints, &result);
-    
+    s = getaddrinfo(NULL, PORT, &hints, &servinfo);
 
-    if (socket != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(socket));
+    if (s != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
         exit(EXIT_FAILURE);
     }
 
-    for(rp = result; rp != NULL; rp = rp->ai_next){
-        printf("domain %i", rp->ai_family);
+    for(rp = servinfo; rp != NULL; rp = rp -> ai_next){
+        socket_file_descriptor = socket(rp -> ai_family, rp -> ai_socktype, rp -> ai_protocol);
+        if(socket_file_descriptor == -1){
+            perror("server: socket");
+            continue;
+        } 
+
+
+        // to fix address already in use erro
+        if(setsockopt(socket_file_descriptor, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) != 0){
+            perror("setsockopt");
+            exit(EXIT_FAILURE);
+        }
+
+
+        if(bind(socket_file_descriptor, rp -> ai_addr, rp -> ai_addrlen) == -1){
+            close(socket_file_descriptor);
+            perror("bind");
+            exit(EXIT_FAILURE);
+        }
+
+        break;
+
+
     }
 
 
-
-
-
-
+    freeaddrinfo(servinfo);
     
+    if(rp == NULL){
+        fprintf(stderr, "server: failed to bind\n");
+        exit(1);
+    }
 
 
+    printf("Correctly set up bind and socket\n");
+
+    if(close(socket_file_descriptor) == -1){
+        perror("close");
+        exit(EXIT_FAILURE);
+    }
     
     
     return 0;
